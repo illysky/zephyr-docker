@@ -35,7 +35,8 @@ RUN apt-get -y update && \
 RUN groupadd --gid $USER_GID $USERNAME && \
     useradd -ms /bin/bash --uid $USER_UID --gid $USER_GID -m $USERNAME && \
     usermod -aG sudo $USERNAME && \
-    usermod -aG root $USERNAME
+    usermod -aG root $USERNAME && \
+    usermod -aG dialout $USERNAME
 
 ########################################################################################
 # Disable asking for a password on sudo
