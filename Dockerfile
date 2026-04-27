@@ -94,6 +94,7 @@ RUN sudo mkdir -p -m 755 /etc/apt/keyrings \
 ########################################################################################
 RUN python3 -m pip install -U pip && \
     python3 -m pip install -U pipx && \
+    python3 -m pip install uv && \
     python3 -m pip install -U setuptools && \
     python3 -m pip install 'cmake>=3.20.0' wheel && \
     python3 -m pip install -U "west==${WEST_VERSION}" && \
