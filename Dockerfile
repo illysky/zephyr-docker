@@ -9,7 +9,7 @@ ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 ARG ZEPHYR_TOOLCHAIN_VERSION=0.17.4
 ARG WEST_VERSION=1.5.0
-ARG JLINK_VERSION=V866 
+ARG JLINK_VERSION=V940
 ARG NRFUTIL_VERSION=1.2.3-e0abdbe
 ARG GO_VERSION=1.22.5
 ARG TIO_VERSION=v3.9
@@ -109,7 +109,7 @@ RUN python3 -m pip install -U pip && \
     sudo apt-get -y install libsm6 && \
     wget -qO- https://raw.githubusercontent.com/nrfconnect/sdk-nrf/main/.clang-format > /workdir/.clang-format && \
     ########################################################################################
-    # Install SEGGER JLink V8.66
+    # Install SEGGER JLink V9.40
     ########################################################################################
     echo "Host architecture: $arch" && \
     case $arch in \
