@@ -6,7 +6,7 @@ on:
       version:
         description: 'Image version tag (also used as sdk-nrf revision)'
         required: true
-        default: 'v3.3.0-rc2'
+        default: 'v3.3.0'
 
 jobs:
   build-and-push:
