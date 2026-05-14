@@ -106,7 +106,7 @@ RUN python3 -m pip install -U pip && \
     ########################################################################################
     python3 -m pip install -U six && \
     sudo apt-get -y install clang-format && \
-    sudo apt-get -y install libsm6 && \
+    sudo apt-get -y install libsm6 libgl1 && \
     wget -qO- https://raw.githubusercontent.com/nrfconnect/sdk-nrf/main/.clang-format > /workdir/.clang-format && \
     ########################################################################################
     # Install SEGGER JLink V9.40
