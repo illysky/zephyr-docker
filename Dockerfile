@@ -64,6 +64,7 @@ RUN mkdir /workdir/.cache && \
         libyaml-dev libfdt1 \
         libusb-1.0-0-dev udev \
         device-tree-compiler \
+        protobuf-compiler \
         xz-utils \
         file \
         ruby \
