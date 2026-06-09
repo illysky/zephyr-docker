@@ -1,6 +1,9 @@
 name: Build and Push Docker Image
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -18,6 +21,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -31,7 +43,7 @@ jobs:
           context: .
           push: true
           build-args: |
-            sdk_nrf_revision=${{ github.event.inputs.version }}
+            sdk_nrf_revision=${{ steps.version.outputs.version }}
           tags: |
-            ghcr.io/illysky/nrfconnect-sdk:${{ github.event.inputs.version }}
+            ghcr.io/illysky/nrfconnect-sdk:${{ steps.version.outputs.version }}
             ghcr.io/illysky/nrfconnect-sdk:latest
