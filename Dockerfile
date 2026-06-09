@@ -1,4 +1,4 @@
-FROM ubuntu:22.04 AS base
+FROM ubuntu:24.04 AS base
 
 ########################################################################################
 # Create a non-root user for this images. This can be overridden by build arguements, 
@@ -13,6 +13,10 @@ ARG JLINK_VERSION=V940
 ARG NRFUTIL_VERSION=1.2.3-e0abdbe
 ARG GO_VERSION=1.22.5
 ARG TIO_VERSION=v3.9
+ARG ANDROID_CMDLINE_TOOLS_VERSION=11076708
+ARG ANDROID_BUILD_TOOLS_VERSION=34.0.0
+ARG ANDROID_PLATFORM_VERSION=34
+ARG PROTOC_VERSION=33.2
 ########################################################################################
 # See https://files.nordicsemi.com/ui/native/swtools/external/nrfutil/executables/x86_64-unknown-linux-gnu/ 
 # For the latest (you have to use the hash)
@@ -55,16 +59,17 @@ RUN mkdir /workdir/.cache && \
         wget \
         python3-pip \
         python3-venv \
+        software-properties-common \
         ninja-build \
         gperf \
         git \
         unzip \
         gn \
-        libncurses5 libncurses5-dev \
-        libyaml-dev libfdt1 \
+        libncurses-dev \
+        libyaml-dev \
+        libfdt-dev \
         libusb-1.0-0-dev udev \
         device-tree-compiler \
-        protobuf-compiler \
         xz-utils \
         file \
         ruby \
@@ -81,6 +86,21 @@ RUN mkdir /workdir/.cache && \
     esac && \
     sudo apt-get -y clean && sudo apt-get -y autoremove
 ########################################################################################
+# Python 3.13 via deadsnakes PPA (Ubuntu 24.04 ships 3.12; 3.13 needs the PPA)
+########################################################################################
+RUN sudo add-apt-repository -y ppa:deadsnakes/ppa && \
+    sudo apt-get -y update && \
+    sudo apt-get -y install --no-install-recommends \
+        python3.13 \
+        python3.13-dev \
+        python3.13-venv && \
+    sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 2 && \
+    sudo update-alternatives --set python3 /usr/bin/python3.13 && \
+    wget -q https://bootstrap.pypa.io/get-pip.py -O /tmp/get-pip.py && \
+    python3 /tmp/get-pip.py --break-system-packages && \
+    rm /tmp/get-pip.py && \
+    sudo apt-get -y clean && sudo apt-get -y autoremove
+########################################################################################
 # Install GitHub CLI (gh)
 ########################################################################################
 RUN sudo mkdir -p -m 755 /etc/apt/keyrings \
@@ -93,19 +113,19 @@ RUN sudo mkdir -p -m 755 /etc/apt/keyrings \
 ########################################################################################
 # Install all the Python Tools
 ########################################################################################
-RUN python3 -m pip install -U pip && \
-    python3 -m pip install -U pipx && \
-    python3 -m pip install uv && \
-    python3 -m pip install -U setuptools && \
-    python3 -m pip install 'cmake>=3.20.0' wheel && \
-    python3 -m pip install -U "west==${WEST_VERSION}" && \
-    python3 -m pip install pc_ble_driver_py && \
+RUN python3 -m pip install --break-system-packages -U pip && \
+    python3 -m pip install --break-system-packages -U pipx && \
+    python3 -m pip install --break-system-packages uv && \
+    python3 -m pip install --break-system-packages -U setuptools && \
+    python3 -m pip install --break-system-packages 'cmake>=3.20.0' wheel && \
+    python3 -m pip install --break-system-packages -U "west==${WEST_VERSION}" && \
+    python3 -m pip install --break-system-packages pc_ble_driver_py && \
     # Newer PIP will not overwrite distutils, so upgrade PyYAML manually
-    python3 -m pip install --ignore-installed -U PyYAML && \
+    python3 -m pip install --break-system-packages --ignore-installed -U PyYAML && \
     ########################################################################################
     # Enable Clang Support
     ########################################################################################
-    python3 -m pip install -U six && \
+    python3 -m pip install --break-system-packages -U six && \
     sudo apt-get -y install clang-format && \
     sudo apt-get -y install libsm6 libgl1 && \
     wget -qO- https://raw.githubusercontent.com/nrfconnect/sdk-nrf/main/.clang-format > /workdir/.clang-format && \
@@ -210,6 +230,47 @@ RUN case $arch in \
     rm -rf /tmp/tio
 
 ########################################################################################
+# protoc (Protocol Buffers compiler) — install from official GitHub release.
+# The apt protobuf-compiler on Ubuntu 24.04 is too old to support proto3 optional
+# fields required by nanopb 0.4.9 (needs --experimental_allow_proto3_optional).
+# Version 33.2 matches nanopb 0.4.9 used in the beeline firmware build.
+########################################################################################
+RUN case $arch in \
+        "amd64") PROTOC_ARCH="x86_64" ;; \
+        "arm64") PROTOC_ARCH="aarch_64" ;; \
+    esac && \
+    wget -q "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-${PROTOC_ARCH}.zip" \
+        -O /tmp/protoc.zip && \
+    sudo unzip -q /tmp/protoc.zip -d /usr/local && \
+    sudo chmod +x /usr/local/bin/protoc && \
+    rm /tmp/protoc.zip && \
+    protoc --version
+
+########################################################################################
+# Android SDK — JDK 17, cmdline-tools, platform-tools, build-tools, SDK platform
+# Provides: adb, logcat, sdkmanager, aapt2, apksigner, javac/java
+# Only installed on amd64 (Google's cmdline-tools zip is Linux x86_64 only).
+########################################################################################
+RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+    sudo apt-get -y update && \
+    sudo apt-get -y install --no-install-recommends openjdk-17-jdk && \
+    sudo apt-get -y clean && sudo apt-get -y autoremove && \
+    sudo mkdir -p /opt/android-sdk && \
+    sudo chown ${USERNAME}:${USERNAME} /opt/android-sdk && \
+    wget -q "https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_CMDLINE_TOOLS_VERSION}_latest.zip" \
+        -O /tmp/cmdline-tools.zip && \
+    unzip -q /tmp/cmdline-tools.zip -d /tmp/android-cmdline && \
+    mkdir -p /opt/android-sdk/cmdline-tools && \
+    mv /tmp/android-cmdline/cmdline-tools /opt/android-sdk/cmdline-tools/latest && \
+    rm -rf /tmp/cmdline-tools.zip /tmp/android-cmdline && \
+    yes | /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null && \
+    /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager \
+        "platform-tools" \
+        "build-tools;${ANDROID_BUILD_TOOLS_VERSION}" \
+        "platforms;android-${ANDROID_PLATFORM_VERSION}"; \
+fi
+
+########################################################################################
 # Download sdk-nrf and west dependencies to install pip requirements
 ########################################################################################
 FROM base
@@ -224,14 +285,14 @@ RUN \
     #west update --narrow -o=--depth=1 && \
     west update && \
     echo "Installing requirements: zephyr/scripts/requirements.txt" && \
-    python3 -m pip install -r zephyr/scripts/requirements.txt && \
+    python3 -m pip install --break-system-packages -r zephyr/scripts/requirements.txt && \
     # Install only the requirements needed for building firmware, not documentation
     echo "Installing requirements: nrf/scripts/requirements-base.txt" && \
-    python3 -m pip install -r nrf/scripts/requirements-base.txt && \
+    python3 -m pip install --break-system-packages -r nrf/scripts/requirements-base.txt && \
     echo "Installing requirements: nrf/scripts/requirements-build.txt" && \
-    python3 -m pip install -r nrf/scripts/requirements-build.txt && \
+    python3 -m pip install --break-system-packages -r nrf/scripts/requirements-build.txt && \
     echo "Installing requirements: bootloader/mcuboot/scripts/requirements.txt" && \
-    python3 -m pip install -r bootloader/mcuboot/scripts/requirements.txt
+    python3 -m pip install --break-system-packages -r bootloader/mcuboot/scripts/requirements.txt
 
 ########################################################################################
 # Create ENVs and make a project directory
@@ -244,7 +305,10 @@ ENV XDG_CACHE_HOME=/workdir/.cache
 ENV ZEPHYR_TOOLCHAIN_VARIANT=zephyr
 ENV ZEPHYR_SDK_INSTALL_DIR=/workdir/zephyr-sdk
 ENV ZEPHYR_BASE=/workdir/zephyr
-ENV PATH="/home/${USERNAME}/.nrfutil/bin:/home/${USERNAME}/go/bin:/usr/local/go/bin:/opt/SEGGER/JLink:${ZEPHYR_BASE}/scripts:${PATH}"
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV ANDROID_HOME=/opt/android-sdk
+ENV ANDROID_SDK_ROOT=/opt/android-sdk
+ENV PATH="/home/${USERNAME}/.nrfutil/bin:/home/${USERNAME}/go/bin:/usr/local/go/bin:/opt/SEGGER/JLink:${ZEPHYR_BASE}/scripts:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/build-tools/34.0.0:${PATH}"
 ########################################################################################
 # Update GIT Line Endings
 ########################################################################################

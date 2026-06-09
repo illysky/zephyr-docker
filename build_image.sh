@@ -14,3 +14,7 @@ docker build \
 
 echo "Built image: nrfconnect-sdk:${NCS_VERSION}"
 echo "Tagged as:   ${GHCR_IMAGE}"
+
+echo "Pushing to ghcr.io..."
+docker push ${GHCR_IMAGE}
+echo "Pushed: ${GHCR_IMAGE}"
