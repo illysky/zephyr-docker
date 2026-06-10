@@ -6,10 +6,19 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Image version tag (also used as sdk-nrf revision)'
+      image_tag:
+        description: 'Docker image tag (e.g. v3.3.2)'
+        required: true
+        default: 'v3.3.2'
+      sdk_nrf_revision:
+        description: 'NCS SDK revision to clone from nrfconnect/sdk-nrf (e.g. v3.3.0)'
         required: true
         default: 'v3.3.0'
+
+env:
+  # NCS SDK version to embed in the image — update this when upgrading NCS.
+  # Independent of the Docker image tag (v3.3.x are our own release increments).
+  SDK_NRF_REVISION: v3.3.0
 
 jobs:
   build-and-push:
@@ -21,13 +30,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve version
+      - name: Resolve versions
         id: version
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "image_tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "sdk_nrf_revision=${{ env.SDK_NRF_REVISION }}" >> $GITHUB_OUTPUT
           else
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "image_tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+            echo "sdk_nrf_revision=${{ github.event.inputs.sdk_nrf_revision }}" >> $GITHUB_OUTPUT
           fi
 
       - name: Log in to GHCR
@@ -43,7 +54,7 @@ jobs:
           context: .
           push: true
           build-args: |
-            sdk_nrf_revision=${{ steps.version.outputs.version }}
+            sdk_nrf_revision=${{ steps.version.outputs.sdk_nrf_revision }}
           tags: |
-            ghcr.io/illysky/nrfconnect-sdk:${{ steps.version.outputs.version }}
+            ghcr.io/illysky/nrfconnect-sdk:${{ steps.version.outputs.image_tag }}
             ghcr.io/illysky/nrfconnect-sdk:latest
