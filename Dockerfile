@@ -17,6 +17,7 @@ ARG ANDROID_CMDLINE_TOOLS_VERSION=11076708
 ARG ANDROID_BUILD_TOOLS_VERSION=34.0.0
 ARG ANDROID_PLATFORM_VERSION=34
 ARG PROTOC_VERSION=33.2
+ARG FIXUID_VERSION=0.6.0
 ########################################################################################
 # See https://files.nordicsemi.com/ui/native/swtools/external/nrfutil/executables/x86_64-unknown-linux-gnu/ 
 # For the latest (you have to use the hash)
@@ -273,6 +274,25 @@ RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
 fi
 
 ########################################################################################
+# fixuid — remaps container UID/GID at runtime to match the host user.
+# Lets anyone docker pull + run --user $(id -u):$(id -g) without permission issues.
+# https://github.com/boxboat/fixuid
+########################################################################################
+RUN case $(dpkg --print-architecture) in \
+        amd64) FIXUID_ARCH="amd64" ;; \
+        arm64) FIXUID_ARCH="arm64" ;; \
+    esac && \
+    wget -q "https://github.com/boxboat/fixuid/releases/download/v${FIXUID_VERSION}/fixuid-${FIXUID_VERSION}-linux-${FIXUID_ARCH}.tar.gz" \
+        -O /tmp/fixuid.tar.gz && \
+    sudo tar -C /usr/local/bin -xzf /tmp/fixuid.tar.gz && \
+    sudo chown root:root /usr/local/bin/fixuid && \
+    sudo chmod 4755 /usr/local/bin/fixuid && \
+    rm /tmp/fixuid.tar.gz && \
+    sudo mkdir -p /etc/fixuid && \
+    printf "user: ${USERNAME}\ngroup: ${USERNAME}\npaths:\n  - /home/${USERNAME}\n  - /workdir\n" \
+        | sudo tee /etc/fixuid/config.yml > /dev/null
+
+########################################################################################
 # Download sdk-nrf and west dependencies to install pip requirements
 ########################################################################################
 FROM base
@@ -316,5 +336,8 @@ ENV PATH="/home/${USERNAME}/.nrfutil/bin:/home/${USERNAME}/go/bin:/usr/local/go/
 ########################################################################################
 RUN git config --global core.autocrlf true
 ########################################################################################
-# We will start as USER
+# fixuid entrypoint — remaps UID/GID at container startup to match the caller.
+# Usage: docker run --user $(id -u):$(id -g) ghcr.io/illysky/nrfconnect-sdk:<tag>
 ########################################################################################
+ENTRYPOINT ["fixuid", "-q"]
+CMD ["/bin/bash"]
