@@ -7,11 +7,11 @@ FROM ubuntu:24.04 AS base
 ARG USERNAME=development
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
-ARG ZEPHYR_TOOLCHAIN_VERSION=0.17.4
+ARG ZEPHYR_TOOLCHAIN_VERSION=1.0.1
 ARG WEST_VERSION=1.5.0
-ARG JLINK_VERSION=V940
-ARG NRFUTIL_VERSION=1.2.3-e0abdbe
-ARG GO_VERSION=1.22.5
+ARG JLINK_VERSION=V960
+ARG NRFUTIL_VERSION=1.4.0-5515776
+ARG GO_VERSION=1.26.5
 ARG TIO_VERSION=v3.9
 ARG ANDROID_CMDLINE_TOOLS_VERSION=11076708
 ARG ANDROID_BUILD_TOOLS_VERSION=34.0.0
@@ -293,11 +293,30 @@ RUN case $(dpkg --print-architecture) in \
         | sudo tee /etc/fixuid/config.yml > /dev/null
 
 ########################################################################################
+# OCI labels — lets `docker inspect` reveal exactly which tool versions are
+# baked into any given image, independent of what the image tag says.
+# (The image tag / NCS revision are versioned independently — see CHANGELOG.md.)
+########################################################################################
+LABEL org.opencontainers.image.title="illysky nRF Connect SDK build image" \
+      org.opencontainers.image.source="https://github.com/illysky/ncs-docker" \
+      com.illysky.zephyr-sdk-version="${ZEPHYR_TOOLCHAIN_VERSION}" \
+      com.illysky.west-version="${WEST_VERSION}" \
+      com.illysky.jlink-version="${JLINK_VERSION}" \
+      com.illysky.nrfutil-version="${NRFUTIL_VERSION}" \
+      com.illysky.go-version="${GO_VERSION}" \
+      com.illysky.tio-version="${TIO_VERSION}"
+
+########################################################################################
 # Download sdk-nrf and west dependencies to install pip requirements
 ########################################################################################
 FROM base
 ARG sdk_nrf_revision=main   
 ARG sdk_nrf_commit
+# IMAGE_VERSION is the full image tag (e.g. v3.5.0-preview1-b1), passed in by
+# build_image.sh / CI. Independent of sdk_nrf_revision — see CHANGELOG.md.
+ARG IMAGE_VERSION=dev
+LABEL org.opencontainers.image.version="${IMAGE_VERSION}" \
+      com.illysky.ncs-revision="${sdk_nrf_revision}"
 RUN \
     #west init -m https://github.com/krish2718/sdk-nrf --mr ${sdk_nrf_revision} && \
     west init -m https://github.com/nrfconnect/sdk-nrf --mr ${sdk_nrf_revision} && \

@@ -1,5 +1,15 @@
 name: Build and Push Docker Image
 
+# ── Versioning scheme ───────────────────────────────────────────────────────
+# Image tags are `<sdk_nrf_revision>-b<build_num>` (e.g. v3.5.0-preview1-b1).
+# The tag is decoupled from the NCS revision baked in: bump build_num when
+# only tools/Dockerfile change, reset to 1 when sdk_nrf_revision changes.
+# Every push also updates:
+#   - `latest`                        -> newest build overall
+#   - `<sdk_nrf_revision>` (no -bN)    -> newest build for that NCS revision
+# See CHANGELOG.md for the release history, and `docker inspect` (OCI/com.illysky.*
+# labels) for the exact tool versions baked into any given image.
+
 on:
   push:
     tags:
@@ -7,18 +17,18 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Docker image tag (e.g. v3.3.2)'
+        description: 'Docker image tag, <sdk_nrf_revision>-b<build_num> (e.g. v3.5.0-preview1-b1)'
         required: true
-        default: 'v3.3.2'
+        default: 'v3.5.0-preview1-b1'
       sdk_nrf_revision:
-        description: 'NCS SDK revision to clone from nrfconnect/sdk-nrf (e.g. v3.3.0)'
+        description: 'NCS SDK revision to clone from nrfconnect/sdk-nrf (e.g. v3.5.0-preview1)'
         required: true
-        default: 'v3.3.0'
+        default: 'v3.5.0-preview1'
 
 env:
   # NCS SDK version to embed in the image — update this when upgrading NCS.
-  # Independent of the Docker image tag (v3.3.x are our own release increments).
-  SDK_NRF_REVISION: v3.3.0
+  # Independent of the Docker image tag (see versioning scheme above).
+  SDK_NRF_REVISION: v3.5.0-preview1
 
 jobs:
   build-and-push:
@@ -56,6 +66,8 @@ jobs:
           no-cache: true
           build-args: |
             sdk_nrf_revision=${{ steps.version.outputs.sdk_nrf_revision }}
+            IMAGE_VERSION=${{ steps.version.outputs.image_tag }}
           tags: |
             ghcr.io/illysky/nrfconnect-sdk:${{ steps.version.outputs.image_tag }}
+            ghcr.io/illysky/nrfconnect-sdk:${{ steps.version.outputs.sdk_nrf_revision }}
             ghcr.io/illysky/nrfconnect-sdk:latest
