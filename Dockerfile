@@ -358,6 +358,30 @@ RUN \
     python3 -m pip install --break-system-packages -r bootloader/mcuboot/scripts/requirements.txt
 
 ########################################################################################
+# Cadence/IntegrIT NatureDSP Signal libs (foss-xtensa/ndsplib-hifi1, -hifi4) — pinned
+# to the exact commits zephyr-examples/west.yml tracks, at the same workspace-relative
+# path (modules/lib/ndsplib-*) west would put them at. Source-available (licensed for
+# Cadence cores only), not GPL/Apache — fine to bake into this image since they're
+# just source, no Cadence toolchain/license involved. Plain git fetch-by-SHA (not a
+# west project) since these two are pinned by commit, not branch, and don't need to
+# move when zephyr_revision does.
+#
+# NOTE: these SHAs are project-specific to zephyr-examples and will drift out of sync
+# if that repo's west.yml re-pins them — re-run this block with updated SHAs when it does.
+########################################################################################
+ARG NDSPLIB_HIFI1_REV=1f73a50fc6399c642163de47785f537e162ac5d9
+ARG NDSPLIB_HIFI4_REV=8ec7552f670456b46249ee30be96dc6003b1285f
+RUN mkdir -p modules/lib && \
+    for pair in "ndsplib-hifi1:${NDSPLIB_HIFI1_REV}" "ndsplib-hifi4:${NDSPLIB_HIFI4_REV}"; do \
+        name="${pair%%:*}"; rev="${pair##*:}"; \
+        echo "Fetching foss-xtensa/${name} @ ${rev}" && \
+        git init -q "modules/lib/${name}" && \
+        git -C "modules/lib/${name}" remote add origin "https://github.com/foss-xtensa/${name}" && \
+        git -C "modules/lib/${name}" fetch --depth=1 origin "${rev}" && \
+        git -C "modules/lib/${name}" checkout -q FETCH_HEAD; \
+    done
+
+########################################################################################
 # Create ENVs and make a project directory
 ########################################################################################
 RUN mkdir /workdir/project
