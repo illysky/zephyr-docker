@@ -161,12 +161,20 @@ RUN python3 -m pip install --break-system-packages -U pip && \
     # https://mcuxpresso.nxp.com/linkserver/latest/
     ########################################################################################
     if [ "$arch" = "amd64" ]; then \
+        # LinkServer's postinst runs `udevadm control --reload`, which fails
+        # in a Docker build (no udevd running) with "Failed to send reload
+        # request", aborting the install even though the files are already
+        # unpacked fine. Stub out udevadm for the duration of the install. \
+        sudo mv /usr/bin/udevadm /usr/bin/udevadm.real && \
+        printf '#!/bin/sh\nexit 0\n' | sudo tee /usr/bin/udevadm > /dev/null && \
+        sudo chmod +x /usr/bin/udevadm && \
         mkdir /tmp/linkserver && cd /tmp/linkserver && \
         wget -q "https://www.nxp.com/lgfiles/updates/mcuxpresso/LinkServer_${LINKSERVER_VERSION}.x86_64.deb.bin" \
             -O LinkServer.deb.bin && \
         chmod a+x LinkServer.deb.bin && \
         sudo ./LinkServer.deb.bin acceptLicense skipIdeSelect && \
-        cd .. && rm -rf linkserver ; \
+        cd /workdir && rm -rf /tmp/linkserver && \
+        sudo mv /usr/bin/udevadm.real /usr/bin/udevadm ; \
     fi && \
     ########################################################################################
     # Zephyr Toolchain
@@ -187,12 +195,14 @@ RUN python3 -m pip install --break-system-packages -U pip && \
             exit 1 ;; \
     esac && \
     echo "Install Zephyr SDK from ZEPHYR_MINIMAL_BUNDLE_URL=${ZEPHYR_MINIMAL_BUNDLE_URL}" && \
+    wget -q --tries=3 "${ZEPHYR_MINIMAL_BUNDLE_URL}" -O /tmp/zephyr-sdk-bundle.tar.${ZEPHYR_TOOLCHAIN_ARCHIVE_FORMAT} && \
     case $ZEPHYR_TOOLCHAIN_ARCHIVE_FORMAT in \
         "gz") \
-            wget -qO - "${ZEPHYR_MINIMAL_BUNDLE_URL}" | tar xz;; \
+            tar xzf /tmp/zephyr-sdk-bundle.tar.${ZEPHYR_TOOLCHAIN_ARCHIVE_FORMAT};; \
         *) \
-            wget -qO - "${ZEPHYR_MINIMAL_BUNDLE_URL}" | tar xJ;; \
+            tar xJf /tmp/zephyr-sdk-bundle.tar.${ZEPHYR_TOOLCHAIN_ARCHIVE_FORMAT};; \
     esac && \
+    rm /tmp/zephyr-sdk-bundle.tar.${ZEPHYR_TOOLCHAIN_ARCHIVE_FORMAT} && \
     mv /workdir/zephyr-sdk-${ZEPHYR_TOOLCHAIN_VERSION} /workdir/zephyr-sdk && cd /workdir/zephyr-sdk && \
     case $arch in \
         "arm64") \
