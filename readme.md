@@ -13,7 +13,7 @@ VS Code / Cursor Dev Container.
 |---|---|---|
 | Ubuntu | 24.04 | Base OS |
 | Zephyr | configurable | Firmware SDK (`west init -m zephyrproject-rtos/zephyr` on build) |
-| Zephyr SDK (toolchain) | 1.0.1 | ARM cross-compiler (`arm-zephyr-eabi`) |
+| Zephyr SDK (toolchain) | 1.0.1 | ARM cross-compiler (`arm-zephyr-eabi`) + Xtensa cross-compilers for the MIMXRT700-EVK DSP cores (`xtensa-nxp_rt700_hifi4_zephyr-elf`, `xtensa-nxp_rt700_hifi1_zephyr-elf`) |
 | west | 1.5.0 | Zephyr meta-tool / build system |
 | SEGGER JLink | V960 | JLink flash/debug support |
 | NXP LinkServer | 26.5.59 | MCU-Link CMSIS-DAP/J-Link debug host tools + firmware switch scripts (`program_CMSIS`/`program_JLINK`) |
@@ -96,6 +96,7 @@ This produces a Docker image tagged `zephyr-docker:<zephyr_revision>-b<build_num
 | `LINKSERVER_VERSION` | `26.5.59` | NXP LinkServer release |
 | `GO_VERSION` | `1.26.5` | Go toolchain version |
 | `TIO_VERSION` | `v3.9` | tio release tag |
+| `extra_toolchains` | `xtensa-nxp_rt700_hifi4_zephyr-elf xtensa-nxp_rt700_hifi1_zephyr-elf` | Extra Zephyr SDK GNU toolchains installed alongside `crossarch` (space-separated `setup.sh -t` names; amd64 only) |
 | `USER_UID` / `USER_GID` | `1000` | Mirror host user (set automatically by `build_image.sh`) |
 
 ## Usage

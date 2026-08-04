@@ -25,6 +25,13 @@ ARG FIXUID_VERSION=0.6.0
 
 ARG arch=amd64
 ARG crossarch=arm-zephyr-eabi
+# Extra Zephyr SDK GNU toolchains installed alongside crossarch, space-separated
+# (setup.sh -t <name>, repeated). Defaults to the Xtensa DSP cores on the NXP
+# MIMXRT700-EVK (RT798S) used by illysky/zephyr-examples' apps/rt700/* —
+# without these, west build fails for the hifi4/hifi1 sysbuild images with
+# "C compiler ... not found" since only crossarch gets installed otherwise.
+# Full toolchain list: <sdk-dir>/setup.sh (no args) or sdk_gnu_toolchains.
+ARG extra_toolchains="xtensa-nxp_rt700_hifi4_zephyr-elf xtensa-nxp_rt700_hifi1_zephyr-elf"
 ENV DEBIAN_FRONTEND=noninteractive
 ARG ZEPHYR_TOOLCHAIN_ARCHIVE_FORMAT=xz
 ########################################################################################
@@ -209,7 +216,9 @@ RUN python3 -m pip install --break-system-packages -U pip && \
             ./setup.sh -t aarch64-zephyr-elf -c \
             ;; \
         *) \
-            yes | ./setup.sh -t ${crossarch} \
+            toolchain_args="-t ${crossarch}" && \
+            for t in ${extra_toolchains}; do toolchain_args="${toolchain_args} -t ${t}"; done && \
+            yes | ./setup.sh ${toolchain_args} \
             ;; \
     esac && \
     #########################################################################################
