@@ -10,7 +10,7 @@ ARG USER_GID=$USER_UID
 ARG ZEPHYR_TOOLCHAIN_VERSION=1.0.1
 ARG WEST_VERSION=1.5.0
 ARG JLINK_VERSION=V960
-ARG NRFUTIL_VERSION=1.4.0-5515776
+ARG LINKSERVER_VERSION=26.5.59
 ARG GO_VERSION=1.26.5
 ARG TIO_VERSION=v3.9
 ARG ANDROID_CMDLINE_TOOLS_VERSION=11076708
@@ -19,8 +19,8 @@ ARG ANDROID_PLATFORM_VERSION=34
 ARG PROTOC_VERSION=33.2
 ARG FIXUID_VERSION=0.6.0
 ########################################################################################
-# See https://files.nordicsemi.com/ui/native/swtools/external/nrfutil/executables/x86_64-unknown-linux-gnu/ 
-# For the latest (you have to use the hash)
+# LinkServer (NXP MCU-Link / CMSIS-DAP debug host tools) release notes/downloads:
+# https://mcuxpresso.nxp.com/linkserver/latest/
 ########################################################################################
 
 ARG arch=amd64
@@ -131,7 +131,7 @@ RUN python3 -m pip install --break-system-packages -U pip && \
     python3 -m pip install --break-system-packages -U six && \
     sudo apt-get -y install clang-format && \
     sudo apt-get -y install libsm6 libgl1 && \
-    wget -qO- https://raw.githubusercontent.com/nrfconnect/sdk-nrf/main/.clang-format > /workdir/.clang-format && \
+    wget -qO- https://raw.githubusercontent.com/zephyrproject-rtos/zephyr/main/.clang-format > /workdir/.clang-format && \
     ########################################################################################
     # Install SEGGER JLink V9.40
     ########################################################################################
@@ -154,12 +154,20 @@ RUN python3 -m pip install --break-system-packages -U pip && \
     sudo cp /opt/SEGGER/JLink/99-jlink.rules /etc/udev/rules.d/99-jlink.rules && \
     cd .. && rm -rf tmp && \
     ########################################################################################
-    # Install nrfutil (official method from Nordic)
+    # Install NXP LinkServer (MCU-Link CMSIS-DAP/J-Link debug host tools + firmware
+    # switch scripts). Bundles the MCU-LINK_installer (program_CMSIS/program_JLINK)
+    # used to flip an onboard MCU-Link probe (e.g. MIMXRT700-EVK) between CMSIS-DAP
+    # and SEGGER J-Link firmware. amd64 only — NXP does not ship an arm64 Linux build.
+    # https://mcuxpresso.nxp.com/linkserver/latest/
     ########################################################################################
-    wget -O ~/.local/bin/nrfutil "https://files.nordicsemi.com/ui/api/v1/download?repoKey=swtools&path=external/nrfutil/executables/x86_64-unknown-linux-gnu/nrfutil-x86_64-unknown-linux-gnu-${NRFUTIL_VERSION}&isNativeBrowsing=false" && \
-    chmod +x ~/.local/bin/nrfutil && \
-    nrfutil install device && \
-    nrfutil install nrf5sdk-tools && \
+    if [ "$arch" = "amd64" ]; then \
+        mkdir /tmp/linkserver && cd /tmp/linkserver && \
+        wget -q "https://www.nxp.com/lgfiles/updates/mcuxpresso/LinkServer_${LINKSERVER_VERSION}.x86_64.deb.bin" \
+            -O LinkServer.deb.bin && \
+        chmod a+x LinkServer.deb.bin && \
+        sudo ./LinkServer.deb.bin acceptLicense skipIdeSelect && \
+        cd .. && rm -rf linkserver ; \
+    fi && \
     ########################################################################################
     # Zephyr Toolchain
     # Releases: https://github.com/zephyrproject-rtos/sdk-ng/releases
@@ -204,6 +212,20 @@ RUN python3 -m pip install --break-system-packages -U pip && \
         sudo apt-get -y install python3.8 python3.8-dev && \
         python3.8 --version; \
     fi 
+########################################################################################
+# udev rules for NXP CMSIS-DAP / MCU-Link debug probes (normal + ISP/DFU-mode PIDs),
+# so LinkServer/pyocd/openocd can access the probe as a non-root user inside the
+# container (mirrors host udev rules — still needed if /dev is bind-mounted without
+# --privileged, and documents the required host-side rule for reference).
+########################################################################################
+RUN printf '%s\n' \
+      '# NXP CMSIS-DAP debug probes (MCU-Link onboard/standalone, LPC-Link2)' \
+      'SUBSYSTEM=="usb", ATTR{idVendor}=="1fc9", ATTR{idProduct}=="0143", MODE="0666", GROUP="plugdev"' \
+      'SUBSYSTEM=="usb", ATTR{idVendor}=="1fc9", ATTR{idProduct}=="0090", MODE="0666", GROUP="plugdev"' \
+      '# MCU-Link ISP/DFU-mode PIDs (used only while flashing probe firmware)' \
+      'SUBSYSTEM=="usb", ATTR{idVendor}=="1fc9", ATTR{idProduct}=="0021", MODE="0666", GROUP="plugdev"' \
+      'SUBSYSTEM=="usb", ATTR{idVendor}=="1fc9", ATTR{idProduct}=="0022", MODE="0666", GROUP="plugdev"' \
+      | sudo tee /etc/udev/rules.d/60-nxp-debug-probes.rules > /dev/null
 ########################################################################################
 # Install Go, mcumgr CLI, and tio (serial terminal)
 ########################################################################################
@@ -297,41 +319,31 @@ RUN case $(dpkg --print-architecture) in \
 # baked into any given image, independent of what the image tag says.
 # (The image tag / NCS revision are versioned independently — see CHANGELOG.md.)
 ########################################################################################
-LABEL org.opencontainers.image.title="illysky nRF Connect SDK build image" \
-      org.opencontainers.image.source="https://github.com/illysky/ncs-docker" \
+LABEL org.opencontainers.image.title="illysky vanilla Zephyr build image" \
+      org.opencontainers.image.source="https://github.com/illysky/zephyr-docker" \
       com.illysky.zephyr-sdk-version="${ZEPHYR_TOOLCHAIN_VERSION}" \
       com.illysky.west-version="${WEST_VERSION}" \
       com.illysky.jlink-version="${JLINK_VERSION}" \
-      com.illysky.nrfutil-version="${NRFUTIL_VERSION}" \
+      com.illysky.linkserver-version="${LINKSERVER_VERSION}" \
       com.illysky.go-version="${GO_VERSION}" \
       com.illysky.tio-version="${TIO_VERSION}"
 
 ########################################################################################
-# Download sdk-nrf and west dependencies to install pip requirements
+# Fetch upstream Zephyr (NOT NCS) and install its Python/west dependencies
 ########################################################################################
 FROM base
-ARG sdk_nrf_revision=main   
-ARG sdk_nrf_commit
-# IMAGE_VERSION is the full image tag (e.g. v3.5.0-preview1-b1), passed in by
-# build_image.sh / CI. Independent of sdk_nrf_revision — see CHANGELOG.md.
+ARG zephyr_revision=main
+# IMAGE_VERSION is the full image tag (e.g. v4.4.1-b1), passed in by
+# build_image.sh / CI. Independent of zephyr_revision — see CHANGELOG.md.
 ARG IMAGE_VERSION=dev
 LABEL org.opencontainers.image.version="${IMAGE_VERSION}" \
-      com.illysky.ncs-revision="${sdk_nrf_revision}"
+      com.illysky.zephyr-revision="${zephyr_revision}"
 RUN \
-    #west init -m https://github.com/krish2718/sdk-nrf --mr ${sdk_nrf_revision} && \
-    west init -m https://github.com/nrfconnect/sdk-nrf --mr ${sdk_nrf_revision} && \
-    if [[ $sdk_nrf_commit =~ "^[a-fA-F0-9]{32}$" ]]; then \
-        git checkout ${sdk_nrf_revision} ; \
-    fi && \
+    west init -m https://github.com/zephyrproject-rtos/zephyr --mr ${zephyr_revision} && \
     #west update --narrow -o=--depth=1 && \
     west update && \
     echo "Installing requirements: zephyr/scripts/requirements.txt" && \
     python3 -m pip install --break-system-packages -r zephyr/scripts/requirements.txt && \
-    # Install only the requirements needed for building firmware, not documentation
-    echo "Installing requirements: nrf/scripts/requirements-base.txt" && \
-    python3 -m pip install --break-system-packages -r nrf/scripts/requirements-base.txt && \
-    echo "Installing requirements: nrf/scripts/requirements-build.txt" && \
-    python3 -m pip install --break-system-packages -r nrf/scripts/requirements-build.txt && \
     echo "Installing requirements: bootloader/mcuboot/scripts/requirements.txt" && \
     python3 -m pip install --break-system-packages -r bootloader/mcuboot/scripts/requirements.txt
 
@@ -349,14 +361,14 @@ ENV ZEPHYR_BASE=/workdir/zephyr
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ENV ANDROID_HOME=/opt/android-sdk
 ENV ANDROID_SDK_ROOT=/opt/android-sdk
-ENV PATH="/home/${USERNAME}/.nrfutil/bin:/home/${USERNAME}/go/bin:/usr/local/go/bin:/opt/SEGGER/JLink:${ZEPHYR_BASE}/scripts:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/build-tools/34.0.0:${PATH}"
+ENV PATH="/home/${USERNAME}/go/bin:/usr/local/go/bin:/opt/SEGGER/JLink:/usr/local/LinkServer:${ZEPHYR_BASE}/scripts:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/build-tools/34.0.0:${PATH}"
 ########################################################################################
 # Update GIT Line Endings
 ########################################################################################
 RUN git config --global core.autocrlf true
 ########################################################################################
 # fixuid entrypoint — remaps UID/GID at container startup to match the caller.
-# Usage: docker run --user $(id -u):$(id -g) ghcr.io/illysky/nrfconnect-sdk:<tag>
+# Usage: docker run --user $(id -u):$(id -g) ghcr.io/illysky/zephyr-docker:<tag>
 ########################################################################################
 ENTRYPOINT ["fixuid", "-q"]
 CMD ["/bin/bash"]
