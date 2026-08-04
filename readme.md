@@ -178,5 +178,13 @@ mcumgr --conntype serial --connstring /dev/ttyACM0,baud=115200 image upload buil
 ## Pulling without authentication
 
 This image is published publicly to GHCR — `docker pull ghcr.io/illysky/zephyr-docker:latest`
-works with no `docker login` required. The CI workflow re-asserts the
-package's public visibility on every run.
+works with no `docker login` required.
+
+Note for maintainers: GHCR packages default to **private** on first push, and
+GitHub's REST/GraphQL API has no endpoint to change visibility for an
+org-owned package (confirmed 404 regardless of token scope — a long-standing,
+[closed-as-not-planned](https://github.com/OpenCTI-Platform/connectors/issues/5985)
+GitHub limitation). After the very first push, flip it once via the UI:
+[Package settings](https://github.com/orgs/illysky/packages/container/zephyr-docker/settings)
+→ Danger Zone → Change visibility → Public. It stays public for all future
+pushes/tags — this is a one-time step, not a per-release chore.

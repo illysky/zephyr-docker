@@ -29,8 +29,6 @@ env:
   # Zephyr revision to embed in the image — update this when upgrading Zephyr.
   # Independent of the Docker image tag (see versioning scheme above).
   ZEPHYR_REVISION: v4.4.1
-  # GHCR package name — must match the image name pushed below.
-  PACKAGE_NAME: zephyr-docker
 
 jobs:
   build-and-push:
@@ -74,16 +72,12 @@ jobs:
             ghcr.io/illysky/zephyr-docker:${{ steps.version.outputs.zephyr_revision }}
             ghcr.io/illysky/zephyr-docker:latest
 
-      # Keep the image freely pullable without auth (no `docker login` needed)
-      # so it can be shared. GHCR packages default to private; this makes sure
-      # every run re-asserts public visibility even if someone flips it back.
-      # illysky is a GitHub Organization, so the package is org-owned — use the
-      # /orgs/{org}/packages endpoint (not /user/packages, which is for
-      # personal-account-owned packages).
-      - name: Ensure GHCR package is public
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GHCR_TOKEN }}
-        run: |
-          gh api --method PATCH "/orgs/illysky/packages/container/${{ env.PACKAGE_NAME }}" \
-            -f visibility=public
+      # NOTE: there is deliberately no "make the package public" step here.
+      # GitHub's REST/GraphQL API has no endpoint to change visibility of an
+      # org-owned package (confirmed: PATCH /orgs/{org}/packages/... 404s
+      # unconditionally, regardless of token scopes — see
+      # https://github.com/OpenCTI-Platform/connectors/issues/5985, closed by
+      # GitHub as not on their roadmap). It's a one-time manual step:
+      # https://github.com/orgs/illysky/packages/container/zephyr-docker/settings
+      # -> Danger Zone -> Change visibility -> Public. Only needed once ever
+      # (visibility persists across future pushes/tags).
